@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Арена Суперпятнашек</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; text-align: center; padding-bottom: 50px; }
+        .dashboard { display: inline-flex; gap: 30px; background: #1e293b; padding: 15px 30px; border-radius: 15px; border-bottom: 4px solid #38bdf8; margin: 20px 0; font-family: monospace; font-size: 1.5em; }
+        #game-board { display: grid; gap: 8px; background: #334155; padding: 10px; border-radius: 10px; margin: 20px auto; display: inline-grid; border: 2px solid #1e293b; }
+
+        .tile { width: 65px; height: 65px; background: #38bdf8; color: #0f172a; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.3em; border-radius: 5px; cursor: pointer; transition: 0.2s; user-select: none; }
+        .tile.correct { background: #10b981; color: white; box-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
+        .tile.empty { background: #1e293b; cursor: default; box-shadow: none; }
+
+        .start-btn { padding: 15px 50px; background: #4ecca3; color: #0f172a; font-weight: bold; font-size: 1.2em; border: none; border-radius: 50px; cursor: pointer; margin-bottom: 20px; box-shadow: 0 4px 15px rgba(78, 204, 163, 0.3); }
+        .info-text { color: #94a3b8; font-size: 0.9em; margin-bottom: 10px; }
+
+        /* Окно результатов */
+        .results-overlay {
+            display: none;
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1e293b;
+            padding: 30px;
+            border-radius: 20px;
+            border: 2px solid #4ecca3;
+            box-shadow: 0 0 100px rgba(0,0,0,0.9);
+            z-index: 100;
+            min-width: 350px;
+        }
+        .res-row { display: flex; justify-content: space-between; margin: 12px 0; font-size: 1.1em; border-bottom: 1px solid #334155; padding-bottom: 4px; }
+        .res-val { color: #38bdf8; font-weight: bold; font-family: monospace; }
+        .total-xp { font-size: 2.5em; color: #4ecca3; margin: 20px 0; font-weight: 900; }
+
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #38bdf8; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h1>Арена: {{ width }} x {{ height }}</h1>
+    <div class="info-text">Ваш текущий чистый коэффициент: <strong>{{ coefficient }}</strong></div>
+
+    <div class="dashboard">
+        <div style="color: #4ecca3;">⏳ <span id="timer">00:00</span></div>
+        <div style="color: #38bdf8;">Ходы: <span id="moves">0</span></div>
+        <div style="color: #f59e0b;">Хаос: <span id="chaos-val">0</span></div>
+    </div>
+
+    <br>
+    <button id="start-btn" class="start-btn" onclick="startGame()">НАЧАТЬ БИТВУ</button>
+
+    <div id="results-modal" class="results-overlay">
+        <h2 style="color: #4ecca3; margin-top: 0;">🏆 ПОБЕДА!</h2>
+        <div class="res-row"><span>Размер поля ($S$):</span> <span id="res-size" class="res-val"></span></div>
+        <div class="res-row"><span>Индекс Хаоса ($H$):</span> <span id="res-chaos" class="res-val"></span></div>
+        <div class="res-row"><span>Эффективность:</span> <span id="res-eff" class="res-val"></span></div>
+        <div class="res-row"><span>Время:</span> <span id="res-time" class="res-val"></span></div>
+        <div class="res-row"><span>Ходы:</span> <span id="res-moves" class="res-val"></span></div>
+        <div class="total-xp">+ <span id="res-xp">0</span> XP</div>
+
+        <div id="sending-status" style="margin-bottom: 15px; font-size: 0.9em; color: #94a3b8;">
+            <div class="loader"></div> Сохранение результата...
+        </div>
+
+        <button id="leader-btn" onclick="window.location.href='/leaderboard'" class="start-btn" style="padding: 12px 20px; font-size: 1.1em; width: 100%; background: #38bdf8; display: none;">
+            ПОСМОТРЕТЬ ГЛОБАЛЬНЫЕ РЕЗУЛЬТАТЫ
+        </button>
+
+        <p style="margin-top: 15px;">
+            <a href="javascript:void(0)" onclick="location.reload()" style="color: #94a3b8; text-decoration: none; font-size: 0.8em;">попробовать еще раз</a>
+        </p>
+    </div>
+
+    <div id="game-board"></div>
+
+    <script>
+        const width = {{ width }};
+        const height = {{ height }};
+        const isRandom = {{ 'true' if is_random else 'false' }};
+        let numbers = [], isGameRunning = false, seconds = 0, moves = 0, hStart = 0, timerInterval = null;
+
+        // ПРЕДОХРАНИТЕЛЬ: чтобы финиш не срабатывал дважды
+        let hasFinished = false;
+
+        function init() {
+            document.getElementById('game-board').style.gridTemplateColumns = `repeat(${width}, 65px)`;
+            numbers = Array.from({length: width * height - 1}, (_, i) => i + 1);
+            numbers.push(null);
+            renderBoard();
+        }
+
+        function getManhattanDist(arr) {
+            let totalDist = 0;
+            for (let i = 0; i < arr.length; i++) {
+                let num = arr[i]; if (num === null) continue;
+                let currX = i % width, currY = Math.floor(i / width);
+                let targetIdx = num - 1;
+                let targetX = targetIdx % width, targetY = Math.floor(targetIdx / width);
+                totalDist += Math.abs(currX - targetX) + Math.abs(currY - targetY);
+            }
+            return totalDist;
+        }
+
+        function renderBoard() {
+            const board = document.getElementById('game-board');
+            board.innerHTML = '';
+            numbers.forEach((num, index) => {
+                const div = document.createElement('div');
+                div.className = 'tile' + (num === null ? ' empty' : (num === index + 1 ? ' correct' : ''));
+                div.textContent = num || '';
+                div.onclick = () => moveTile(index);
+                board.appendChild(div);
+            });
+        }
+
+        function startGame() {
+            if (timerInterval) clearInterval(timerInterval);
+            seconds = 0; moves = 0; hasFinished = false; // Сброс флага
+            document.getElementById('results-modal').style.display = 'none';
+            document.getElementById('leader-btn').style.display = 'none';
+            document.getElementById('sending-status').style.display = 'block';
+            document.getElementById('sending-status').innerHTML = '<div class="loader"></div> Сохранение результата...';
+
+            do { numbers.sort(() => Math.random() - 0.5); } while (!isSolvable(numbers, width, height));
+            hStart = getManhattanDist(numbers);
+            document.getElementById('chaos-val').textContent = hStart;
+            renderBoard();
+            isGameRunning = true;
+            timerInterval = setInterval(() => {
+                seconds++;
+                let m = Math.floor(seconds / 60).toString().padStart(2, '0');
+                let s = (seconds % 60).toString().padStart(2, '0');
+                document.getElementById('timer').textContent = `${m}:${s}`;
+            }, 1000);
+        }
+
+        function moveTile(index) {
+            if (!isGameRunning) return;
+            const emptyIndex = numbers.indexOf(null);
+            const row = Math.floor(index / width), col = index % width;
+            const eRow = Math.floor(emptyIndex / width), eCol = emptyIndex % width;
+            if (row === eRow || col === eCol) {
+                moves++; document.getElementById('moves').textContent = moves;
+                const step = (row === eRow) ? (index < emptyIndex ? 1 : -1) : (index < emptyIndex ? width : -width);
+                let curr = emptyIndex;
+                while (curr !== index) { let next = curr - step; numbers[curr] = numbers[next]; curr = next; }
+                numbers[index] = null; renderBoard();
+                // Проверка на победу
+                if (numbers.slice(0, -1).every((n, i) => n === i + 1)) {
+                    finishGame();
+                }
+            }
+        }
+
+        function isSolvable(arr, w, h) {
+            let inv = 0; let flat = arr.filter(n => n !== null);
+            for (let i = 0; i < flat.length; i++)
+                for (let j = i + 1; j < flat.length; j++) if (flat[i] > flat[j]) inv++;
+            const emptyRowFromBottom = h - Math.floor(arr.indexOf(null) / w);
+            return (w % 2 !== 0) ? (inv % 2 === 0) : ((emptyRowFromBottom % 2 !== 0) === (inv % 2 === 0));
+        }
+
+        function finishGame() {
+            if (hasFinished) return; // ПРЕДОХРАНИТЕЛЬ
+            hasFinished = true;
+            isGameRunning = false;
+            clearInterval(timerInterval);
+
+            const S = width * height; const R = isRandom ? 2.0 : 1.0;
+            const efficiency = ((hStart / moves) * 100).toFixed(1);
+            const timeFactor = Math.sqrt(seconds) || 1;
+            let earnedXP = ((Math.pow(S, 1.5) * hStart) / (moves * timeFactor)) * R;
+            earnedXP = Math.round(earnedXP * 10) / 10;
+
+            document.getElementById('res-size').textContent = `${width}x${height}`;
+            document.getElementById('res-chaos').textContent = hStart;
+            document.getElementById('res-eff').textContent = efficiency + "%";
+            document.getElementById('res-time').textContent = seconds + " сек";
+            document.getElementById('res-moves').textContent = moves;
+            document.getElementById('res-xp').textContent = earnedXP;
+
+            // Показываем модалку
+            document.getElementById('results-modal').style.display = 'block';
+
+            fetch('/save_result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ xp: earnedXP, moves: moves, time: seconds, chaos: hStart, size: S, is_random: isRandom })
+            })
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('sending-status').innerHTML = "✅ Данные в MongoDB Atlas";
+                setTimeout(() => {
+                    document.getElementById('sending-status').style.display = 'none';
+                    document.getElementById('leader-btn').style.display = 'block';
+                }, 1000);
+            })
+            .catch(err => {
+                document.getElementById('sending-status').innerHTML = "❌ Ошибка сети";
+            });
+        }
+        init();
+    </script>
+</body>
+</html>

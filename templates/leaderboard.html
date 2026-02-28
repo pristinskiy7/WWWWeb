@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Зал Славы - Суперпятнашка</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: white; text-align: center; padding: 50px; }
+        .leader-table { width: 100%; max-width: 800px; margin: 0 auto; border-collapse: collapse; background: #1e293b; border-radius: 15px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        th { background: #334155; padding: 20px; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; }
+        td { padding: 15px 20px; border-bottom: 1px solid #334155; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: #2d3a4f; }
+        .rank { font-weight: bold; color: #94a3b8; width: 50px; }
+        .player-name { text-align: left; font-weight: bold; }
+        .pure-xp { color: #4ecca3; font-weight: bold; font-family: monospace; font-size: 1.2em; }
+
+        /* Контейнер для кнопок */
+        .btn-container { margin-top: 40px; display: flex; gap: 20px; justify-content: center; align-items: center; }
+
+        .back-btn { padding: 12px 30px; background: #38bdf8; color: #0f172a; text-decoration: none; border-radius: 50px; font-weight: bold; transition: 0.2s; }
+        .back-btn:hover { background: #4ecca3; transform: scale(1.05); }
+
+        .logout-btn { padding: 10px 25px; border: 2px solid #ef4444; color: #ef4444; text-decoration: none; border-radius: 50px; font-weight: bold; font-size: 0.9em; transition: 0.2s; }
+        .logout-btn:hover { background: #ef4444; color: white; }
+    </style>
+</head>
+<body>
+    <h1>🏆 ГЛОБАЛЬНЫЙ РЕЙТИНГ</h1>
+    <p style="color: #94a3b8;">Коэффициент мастерства (Total XP - Record XP)</p>
+
+    <table class="leader-table">
+        <thead>
+            <tr>
+                <th class="rank">#</th>
+                <th class="player-name">Игрок / Команда</th>
+                <th>Чистый XP</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for player in players %}
+            <tr>
+                <td class="rank">{{ loop.index }}</td>
+                <td class="player-name">
+                    {{ player.id }}
+                    <span style="color: #64748b; font-weight: normal; font-size: 0.8em;">[{{ player.team }}]</span>
+                </td>
+                <td class="pure-xp">{{ player.pure_xp }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="btn-container">
+        <a href="/play" class="back-btn">← ВЕРНУТЬСЯ НА АРЕНУ</a>
+        <a href="/logout" class="logout-btn">СМЕНИТЬ ИГРОКА (ВЫХОД)</a>
+    </div>
+</body>
+</html>
